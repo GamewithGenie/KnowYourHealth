@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Know Your Health</title>
+  <style>
+    /* Background uses the new image */
+    :root{--accent:#ff4444;--glass: rgba(255,255,255,0.08);}    
+    html,body{height:100%;margin:0;font-family:Inter, Arial, sans-serif;color:#fff}
+    body{
+      background: #900; /* fallback */
+      background-image: url('example.png');
+      background-size: cover;
+      background-position: center;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+      display:flex;align-items:center;justify-content:center;padding:24px;
+      position: relative; /* Added for progress bar positioning */
+    }
+
+    /* wrapper so the info button can overlap the card */
+    .card-wrapper{position:relative;max-width:760px;width:100%;display:flex;justify-content:center}
+
+    .card{
+      width:100%;max-width:520px;background:linear-gradient(135deg, rgba(0,0,0,0.35), rgba(0,0,0,0.45));
+      border-radius:14px;padding:22px;box-shadow:0 8px 30px rgba(0,0,0,0.5);backdrop-filter: blur(6px);
+      transform-origin:center; /* used for flip animation */
+      margin: 0 auto; /* Ensure card is centered */
+    }
+
+    .card h1, .card h2{margin:0 0 14px 0;text-align:center;} /* Center the title */
+    .card p{margin:0 0 12px 0;color:rgba(255,255,255,0.9)}
+
+    /* subtle card flip animation (only when class is added) */
+    @keyframes cardFlipIn{from{transform: rotateY(-90deg) translateZ(0);opacity:0}to{transform: rotateY(0deg) translateZ(0);opacity:1}}
+    .card.animate{animation: cardFlipIn 520ms ease forwards}
+
+    .options{margin-top:10px}
+    .option{background:var(--glass);padding:12px;border-radius:10px;margin:8px 0;cursor:pointer;transition:background .18s, transform .12s}
+    .option:hover{transform:translateY(-3px);}
+    .option.selected{background:linear-gradient(90deg,var(--accent),#ff7b7b);color:white}
+
+    .controls{display:flex;justify-content:space-between;align-items:center;margin-top:18px}
+    .btn{padding:10px 16px;border-radius:10px;border:none;cursor:pointer;font-weight:600}
+    .btn.primary{background:var(--accent);color:#fff}
+    .btn.ghost{background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.12)}
+    .btn:disabled{opacity:.48;cursor:not-allowed}
+
+    /* progress centered at bottom of page */
+    .progress-wrap{
+      position: fixed;
+      left: 50%;
+      bottom: 20px;
+      transform: translateX(-50%);
+      width: 80%;
+      max-width: 520px;
+      z-index: 10;
+    }
+    .progress-bg{height:14px;background:rgba(255,255,255,0.12);border-radius:24px;overflow:hidden}
+    .progress-bar{height:100%;width:0;background:linear-gradient(90deg,var(--accent),#ff7b7b);transition:width .4s ease}
+    .progress-text{color:rgba(255,255,255,0.95);text-align:center;margin-top:6px;font-size:13px}
+
+    /* info button moved to top right corner of the page */
+    .info-btn{position:fixed;top:14px;right:14px;width:44px;height:44px;border-radius:50%;border:none;background:#ffffffcc;color:#b71c1c;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:30;box-shadow:0 6px 18px rgba(0,0,0,0.35)}
+
+    /* info modal (hidden by default) */
+    .info-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);z-index:100}
+    .info-box{background:#fff;color:#333;padding:18px;border-radius:12px;max-width:320px;text-align:center}
+
+    /* result styles */
+    .score{font-size:40px;font-weight:700;margin:12px 0}
+
+    /* small screens tweaks */
+    @media (max-width:520px){
+      .card{padding:16px}
+      .info-btn{top:10px;right:10px;width:40px;height:40px}
+      .progress-wrap{width: 90%;}
+    }
+  </style>
+</head>
+<body>
+  <div class="card-wrapper">
+    <!-- Info button at top right of page -->
+    <button id="infoBtn" class="info-btn" aria-label="info">i</button>
+
+    <!-- Start screen card -->
+    <div id="startCard" class="card" aria-hidden="false">
+      <h1>Know Your Health</h1>
+      <p>Answer a few simple questions to get your health percentage.</p>
+      <div style="display:flex;gap:12px;justify-content:center;margin-top:12px">
+        <button class="btn primary" id="startBtn">Start</button>
+        <button class="btn ghost" id="aboutSmall">About</button>
+      </div>
+    </div>
+
+    <!-- Quiz card (hidden until start) -->
+    <div id="quizCard" class="card" style="display:none"></div>
+
+    <!-- Result card (hidden until finish) -->
+    <div id="resultCard" class="card" style="display:none"></div>
+  </div>
+
+  <!-- Info modal (closed by default) -->
+  <div id="infoModal" class="info-modal" role="dialog" aria-modal="true">
+    <div class="info-box">
+      <h3>About</h3>
+      <p>Created by <strong>M. Abdullah Aftab</strong></p>
+      <p style="margin-top:8px;color:#666;font-size:13px">Tap anywhere outside to close</p>
+    </div>
+  </div>
+
+  <!-- progress at bottom center of page -->
+  <div class="progress-wrap" id="progressWrap" style="display:none">
+    <div class="progress-bg"><div id="progressBar" class="progress-bar"></div></div>
+    <div id="progressText" class="progress-text">0/10 completed (0%)</div>
+  </div>
+
+  <script>
+    // Quiz data (you can edit questions & scores here)
+    const questions = [
+      { q: 'How many hours do you sleep daily?', opts:['<4','4-6','6-8','8+'], scores:[10,20,30,25] },
+      { q: 'How much water do you drink daily?', opts:['<1L','1-2L','2-3L','3L+'], scores:[10,20,30,25] },
+      { q: 'How often do you exercise?', opts:['Never','1-2 times per week','3-4 times per week','Daily'], scores:[10,20,30,25] },
+      { q: 'Servings of fruits/veg daily?', opts:['None','1-2','3-4','5+'], scores:[10,20,30,25] },
+      { q: 'How often do you eat junk food?', opts:['Daily','3-4 times per week','1-2 times per week','Rarely'], scores:[10,20,30,25] },
+      { q: 'How often do you brush your teeth?', opts:['Never','Once','Twice','More'], scores:[5,20,35,40] },
+      { q: 'Do you smoke/drink often?', opts:['Daily','Often','Rarely','Never'], scores:[10,20,30,40] },
+      { q: 'How much time do you sit daily?', opts:['10+ hrs','7-9 hrs','4-6 hrs','<4 hrs'], scores:[5,20,30,40] },
+      { q: 'How often do you get check-ups?', opts:['Never','Rarely','Once/yr','Regularly'], scores:[5,20,30,40] },
+      { q: 'How stressed are you daily?', opts:['Very','High','Some','Low'], scores:[10,20,30,40] }
+    ];
+
+    const startBtn = document.getElementById('startBtn');
+    const aboutSmall = document.getElementById('aboutSmall');
+    const startCard = document.getElementById('startCard');
+    const quizCard = document.getElementById('quizCard');
+    const resultCard = document.getElementById('resultCard');
+    const infoBtn = document.getElementById('infoBtn');
+    const infoModal = document.getElementById('infoModal');
+    const progressWrap = document.getElementById('progressWrap');
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+
+    let current = 0;
+    let answers = new Array(questions.length).fill(null);
+
+    // show info modal only when i is tapped
+    infoBtn.addEventListener('click', (e)=>{ infoModal.style.display = 'flex'; });
+    // close modal when clicking outside box
+    infoModal.addEventListener('click', (e)=>{ if(e.target === infoModal) infoModal.style.display = 'none'; });
+    // small about also opens modal
+    aboutSmall.addEventListener('click', ()=> infoModal.style.display = 'flex');
+
+    startBtn.addEventListener('click', startQuiz);
+
+    function startQuiz(){
+      startCard.style.display = 'none';
+      resultCard.style.display = 'none';
+      quizCard.style.display = 'block';
+      progressWrap.style.display = 'block';
+      current = 0; answers.fill(null);
+      renderQuestion();
+      updateProgress();
+    }
+
+    function renderQuestion(){
+      const q = questions[current];
+      // build options with selection state
+      const opts = q.opts.map((o,idx)=>{
+        const sel = answers[current] === idx ? ' selected' : '';
+        return `<div class="option${sel}" data-idx="${idx}">${o}</div>`;
+      }).join('');
+
+      quizCard.innerHTML = `
+        <h2>Q${current+1}. ${q.q}</h2>
+        <div class="options">${opts}</div>
+        <div class="controls">
+          <button class="btn ghost" id="backBtn">Back</button>
+          <button class="btn primary" id="nextBtn" ${answers[current]===null? 'disabled': ''}>${current===questions.length-1? 'Finish' : 'Next'}</button>
+        </div>
+      `;
+
+      // add flip animation class (only on question change)
+      quizCard.classList.remove('animate');
+      void quizCard.offsetWidth; // force reflow to restart animation
+      quizCard.classList.add('animate');
+
+      // wire up option click
+      document.querySelectorAll('.option').forEach(optEl => {
+        optEl.addEventListener('click', () => {
+          const idx = Number(optEl.dataset.idx);
+          answers[current] = idx; // save selection
+          // mark selection visually
+          document.querySelectorAll('.option').forEach(x=>x.classList.remove('selected'));
+          optEl.classList.add('selected');
+          // enable next button
+          const nextBtn = document.getElementById('nextBtn');
+          if(nextBtn) nextBtn.disabled = false;
+          updateProgress();
+        });
+      });
+
+      // back & next handlers
+      const backBtn = document.getElementById('backBtn');
+      backBtn.style.visibility = current === 0 ? 'hidden' : 'visible';
+      backBtn.onclick = ()=>{ if(current>0){ current--; renderQuestion(); updateProgress(); }};
+
+      document.getElementById('nextBtn').onclick = ()=>{
+        if(answers[current] === null) return; // safety
+        if(current < questions.length-1){ current++; renderQuestion(); updateProgress(); }
+        else finishQuiz();
+      };
+    }
+
+    function updateProgress(){
+      const answered = answers.filter(a => a !== null).length;
+      const percent = Math.round((answered / questions.length) * 100);
+      progressBar.style.width = percent + '%';
+      progressText.textContent = `${answered}/${questions.length} completed (${percent}%)`;
+    }
+
+    function finishQuiz(){
+      // compute total and normalize to max possible
+      let total = 0; let max = 0;
+      questions.forEach((q, i)=>{
+        const idx = answers[i];
+        if(idx !== null && idx !== undefined) total += q.scores[idx];
+        max += Math.max(...q.scores);
+      });
+      // avoid NaN if user skipped (shouldn't happen since Next disabled until select)
+      const pct = Math.round((total / max) * 100) || 0;
+
+      // result text
+      let msg = 'Needs improvement';
+      if(pct >= 80) msg = 'Excellent health!';
+      else if(pct >= 60) msg = 'Good health, keep it up!';
+      else if(pct >= 40) msg = 'Average, there is room to improve.';
+
+      // show result
+      quizCard.style.display = 'none';
+      progressWrap.style.display = 'none';
+      resultCard.style.display = 'block';
+      resultCard.innerHTML = `<h2>Your Health Score</h2><div class="score">${pct}%</div><p>${msg}</p><div style="margin-top:12px"><button class="btn primary" id="restartBtn">Restart</button></div>`;
+      document.getElementById('restartBtn').onclick = ()=>{ startCard.style.display='block'; resultCard.style.display='none'; updateProgress(); };
+    }
+
+    // close info modal when clicking outside the white box only
+    document.getElementById('infoModal').addEventListener('click', (e)=>{ if(e.target === document.getElementById('infoModal')) document.getElementById('infoModal').style.display='none'; });
+
+    /* Optional: start on Enter key when Start button focused */
+    startBtn.addEventListener('keyup', (e)=>{ if(e.key === 'Enter') startQuiz(); });
+
+  </script>
+</body>
+</html>
